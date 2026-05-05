@@ -865,14 +865,31 @@
     <h2>Upload Your Notes</h2>
     <p class="subtitle">We'll generate 5 MCQs from your study material</p>
 
-    <div class="upload-zone" id="upload-zone">
-      <input type="file" id="file-input" accept=".pdf,.txt" onchange="handleFileSelect(this)" />
-      <span class="upload-icon">📄</span>
-      <div class="upload-text">
-        <strong>Click to choose</strong> or drag and drop<br />
+    <!-- Hidden real file input -->
+    <input type="file" id="file-input" accept=".pdf,.txt" style="display:none"
+           onchange="handleFileSelect(this)" />
+
+    <!-- Visible upload area -->
+    <div id="upload-zone" style="
+      border: 2px dashed rgba(255,255,255,0.15);
+      border-radius: 10px;
+      padding: 36px 24px;
+      text-align: center;
+      cursor: pointer;
+      margin-bottom: 20px;
+      transition: all 0.2s;
+    " onclick="document.getElementById('file-input').click()"
+       onmouseover="this.style.borderColor='#a78bfa';this.style.background='rgba(124,111,205,0.05)'"
+       onmouseout="this.style.borderColor='rgba(255,255,255,0.15)';this.style.background=''"
+       ondragover="event.preventDefault();this.style.borderColor='#a78bfa'"
+       ondragleave="this.style.borderColor='rgba(255,255,255,0.15)'"
+       ondrop="handleDrop(event)">
+      <span style="font-size:2.5rem; display:block; margin-bottom:12px;">📄</span>
+      <div style="font-size:0.92rem; color:#a0a0b8;">
+        <strong style="color:#a78bfa;">Click to choose</strong> or drag and drop<br />
         <span style="font-size:0.8rem;">PDF or TXT · Max 10MB</span>
       </div>
-      <div id="file-chosen-display"></div>
+      <div id="file-chosen-display" style="margin-top:12px;"></div>
     </div>
 
     <button class="btn btn-primary" id="generate-btn" onclick="generateQuiz()" disabled>
@@ -1000,15 +1017,30 @@
 
     <!-- Host: upload + start -->
     <div id="host-controls">
-      <div class="upload-zone" id="multi-upload-zone" style="padding: 24px;">
-        <input type="file" id="multi-file-input" accept=".pdf,.txt" onchange="handleMultiFileSelect(this)" />
-        <span class="upload-icon">📄</span>
-        <div class="upload-text">
-          <strong>Upload notes</strong> to generate questions<br />
+      <!-- Hidden real file input -->
+      <input type="file" id="multi-file-input" accept=".pdf,.txt" style="display:none"
+             onchange="handleMultiFileSelect(this)" />
+
+      <!-- Visible upload button -->
+      <div id="multi-upload-box" style="
+        border: 2px dashed rgba(255,255,255,0.15);
+        border-radius: 10px;
+        padding: 24px;
+        text-align: center;
+        margin-bottom: 14px;
+        cursor: pointer;
+        transition: all 0.2s;
+      " onclick="document.getElementById('multi-file-input').click()"
+         onmouseover="this.style.borderColor='#a78bfa'"
+         onmouseout="this.style.borderColor='rgba(255,255,255,0.15)'">
+        <div style="font-size:2rem; margin-bottom:8px;">📄</div>
+        <div style="font-size:0.9rem; color:#a0a0b8;">
+          <strong style="color:#a78bfa;">Click here</strong> to upload notes<br/>
           <span style="font-size:0.8rem;">PDF or TXT</span>
         </div>
-        <div id="multi-file-chosen"></div>
+        <div id="multi-file-chosen" style="margin-top:10px;"></div>
       </div>
+
       <button class="btn btn-gold" id="start-quiz-btn" onclick="hostStartQuiz()" disabled>
         Start Quiz for Everyone 🚀
       </button>
@@ -1187,22 +1219,18 @@ function handleFileSelect(input) {
   document.getElementById('generate-btn').disabled = false;
 }
 
-// Drag and drop
-const uploadZone = document.getElementById('upload-zone');
-uploadZone.addEventListener('dragover', e => { e.preventDefault(); uploadZone.classList.add('dragover'); });
-uploadZone.addEventListener('dragleave', () => uploadZone.classList.remove('dragover'));
-uploadZone.addEventListener('drop', e => {
+// Drag and drop handler
+function handleDrop(e) {
   e.preventDefault();
-  uploadZone.classList.remove('dragover');
   const file = e.dataTransfer.files[0];
-  if (file && (file.type === 'application/pdf' || file.name.endsWith('.txt'))) {
+  if (file && (file.name.toLowerCase().endsWith('.pdf') || file.name.toLowerCase().endsWith('.txt'))) {
     state.uploadedFile = file;
-    document.getElementById('file-chosen-display').innerHTML = `<div class="file-chosen">✅ ${file.name}</div>`;
+    document.getElementById('file-chosen-display').innerHTML = '<div class="file-chosen">✅ ' + file.name + '</div>';
     document.getElementById('generate-btn').disabled = false;
   } else {
     toast('Only PDF or TXT files are supported.', 'error');
   }
-});
+}
 
 /* ═══════════════════════════════════════════════
    EXTRACT TEXT FROM FILE
