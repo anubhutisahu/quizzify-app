@@ -1,0 +1,1866 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Quizzify – AI Quiz Generator</title>
+
+  <!-- AI: Pollinations.AI (free, no login, no API key, works from file://) -->
+  <!-- Google Fonts: Syne (display) + DM Sans (body) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet" />
+
+  <!-- Socket.IO client (CDN) -->
+  <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+
+
+  <style>
+    /* ══════════════════════════════════════════
+       DESIGN TOKENS
+    ══════════════════════════════════════════ */
+    :root {
+      --bg:       #0a0a0f;
+      --bg2:      #111118;
+      --bg3:      #1a1a26;
+      --surface:  #1e1e2e;
+      --surface2: #252538;
+      --border:   rgba(255,255,255,0.08);
+      --border2:  rgba(255,255,255,0.15);
+
+      --accent:   #7c6fcd;
+      --accent2:  #a78bfa;
+      --accent3:  #c4b5fd;
+      --gold:     #f59e0b;
+      --gold2:    #fcd34d;
+      --green:    #34d399;
+      --red:      #f87171;
+      --blue:     #60a5fa;
+
+      --text:     #f0f0f8;
+      --text2:    #a0a0b8;
+      --text3:    #6060788;
+
+      --font-display: 'Syne', sans-serif;
+      --font-body:    'DM Sans', sans-serif;
+
+      --radius:   16px;
+      --radius-sm: 10px;
+      --shadow:   0 8px 32px rgba(0,0,0,0.5);
+      --shadow-sm: 0 4px 16px rgba(0,0,0,0.3);
+
+      --transition: 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    /* ══════════════════════════════════════════
+       RESET + BASE
+    ══════════════════════════════════════════ */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--font-body);
+      font-size: 16px;
+      line-height: 1.6;
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    /* Ambient glow background */
+    body::before {
+      content: '';
+      position: fixed;
+      top: -30vh;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 80vw;
+      height: 80vh;
+      background: radial-gradient(ellipse, rgba(124,111,205,0.12) 0%, transparent 70%);
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    /* ══════════════════════════════════════════
+       SCREEN SYSTEM
+    ══════════════════════════════════════════ */
+    .screen {
+      display: none;
+      position: relative;
+      z-index: 1;
+      min-height: 100vh;
+      padding: 24px 16px;
+      align-items: center;
+      justify-content: center;
+      flex-direction: column;
+      animation: fadeUp 0.4s ease both;
+    }
+    .screen.active { display: flex; }
+
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(20px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    /* ══════════════════════════════════════════
+       CARD
+    ══════════════════════════════════════════ */
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 40px 36px;
+      width: 100%;
+      max-width: 520px;
+      box-shadow: var(--shadow);
+      position: relative;
+      overflow: hidden;
+    }
+    .card::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 2px;
+      background: linear-gradient(90deg, var(--accent), var(--accent2), var(--gold));
+      opacity: 0.7;
+    }
+    .card-wide { max-width: 720px; }
+
+    /* ══════════════════════════════════════════
+       LOGO / BRAND
+    ══════════════════════════════════════════ */
+    .logo {
+      font-family: var(--font-display);
+      font-size: 2.8rem;
+      font-weight: 800;
+      letter-spacing: -1px;
+      background: linear-gradient(135deg, var(--accent2), var(--gold2));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      line-height: 1;
+      margin-bottom: 6px;
+    }
+    .tagline {
+      color: var(--text2);
+      font-size: 0.9rem;
+      font-weight: 300;
+      letter-spacing: 0.5px;
+      margin-bottom: 32px;
+    }
+
+    /* ══════════════════════════════════════════
+       TYPOGRAPHY
+    ══════════════════════════════════════════ */
+    h2 {
+      font-family: var(--font-display);
+      font-size: 1.6rem;
+      font-weight: 700;
+      margin-bottom: 8px;
+      letter-spacing: -0.5px;
+    }
+    h3 {
+      font-family: var(--font-display);
+      font-size: 1.2rem;
+      font-weight: 700;
+      margin-bottom: 6px;
+    }
+    .subtitle {
+      color: var(--text2);
+      font-size: 0.88rem;
+      margin-bottom: 28px;
+    }
+
+    /* ══════════════════════════════════════════
+       FORM ELEMENTS
+    ══════════════════════════════════════════ */
+    .input-group { margin-bottom: 18px; }
+    .input-group label {
+      display: block;
+      font-size: 0.82rem;
+      font-weight: 500;
+      color: var(--text2);
+      margin-bottom: 7px;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+    }
+    input[type="text"] {
+      width: 100%;
+      background: var(--bg3);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      color: var(--text);
+      font-family: var(--font-body);
+      font-size: 1rem;
+      padding: 13px 16px;
+      transition: border-color var(--transition), box-shadow var(--transition);
+      outline: none;
+    }
+    input[type="text"]:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(124,111,205,0.18);
+    }
+    input[type="text"]::placeholder { color: #444460; }
+
+    /* ══════════════════════════════════════════
+       BUTTONS
+    ══════════════════════════════════════════ */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      padding: 13px 28px;
+      border-radius: var(--radius-sm);
+      font-family: var(--font-body);
+      font-size: 0.95rem;
+      font-weight: 600;
+      cursor: pointer;
+      border: none;
+      transition: all var(--transition);
+      text-align: center;
+      width: 100%;
+    }
+    .btn-primary {
+      background: linear-gradient(135deg, var(--accent), #6d5fc4);
+      color: #fff;
+      box-shadow: 0 4px 20px rgba(124,111,205,0.35);
+    }
+    .btn-primary:hover:not(:disabled) {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 28px rgba(124,111,205,0.5);
+    }
+    .btn-secondary {
+      background: var(--bg3);
+      color: var(--text);
+      border: 1px solid var(--border);
+    }
+    .btn-secondary:hover:not(:disabled) {
+      background: var(--surface2);
+      border-color: var(--border2);
+    }
+    .btn-gold {
+      background: linear-gradient(135deg, var(--gold), #d97706);
+      color: #1a1000;
+      font-weight: 700;
+      box-shadow: 0 4px 20px rgba(245,158,11,0.3);
+    }
+    .btn-gold:hover:not(:disabled) {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 28px rgba(245,158,11,0.45);
+    }
+    .btn-danger {
+      background: rgba(248,113,113,0.1);
+      color: var(--red);
+      border: 1px solid rgba(248,113,113,0.3);
+    }
+    .btn-danger:hover { background: rgba(248,113,113,0.2); }
+    .btn:disabled { opacity: 0.45; cursor: not-allowed; transform: none !important; }
+    .btn-sm { padding: 9px 18px; font-size: 0.85rem; width: auto; }
+
+    /* ══════════════════════════════════════════
+       DIVIDER
+    ══════════════════════════════════════════ */
+    .divider {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin: 24px 0;
+      color: var(--text2);
+      font-size: 0.8rem;
+    }
+    .divider::before, .divider::after {
+      content: '';
+      flex: 1;
+      height: 1px;
+      background: var(--border);
+    }
+
+    /* ══════════════════════════════════════════
+       MODE CARDS (Single / Multiplayer)
+    ══════════════════════════════════════════ */
+    .mode-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px;
+      margin-bottom: 0;
+    }
+    .mode-card {
+      background: var(--bg3);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 20px 16px;
+      text-align: center;
+      cursor: pointer;
+      transition: all var(--transition);
+    }
+    .mode-card:hover {
+      border-color: var(--accent);
+      background: var(--surface2);
+      transform: translateY(-3px);
+    }
+    .mode-icon { font-size: 2rem; margin-bottom: 10px; display: block; }
+    .mode-title { font-weight: 600; font-size: 0.95rem; margin-bottom: 4px; }
+    .mode-desc  { font-size: 0.78rem; color: var(--text2); }
+
+    /* ══════════════════════════════════════════
+       FILE UPLOAD ZONE
+    ══════════════════════════════════════════ */
+    .upload-zone {
+      border: 2px dashed var(--border2);
+      border-radius: var(--radius-sm);
+      padding: 36px 24px;
+      text-align: center;
+      cursor: pointer;
+      transition: all var(--transition);
+      position: relative;
+      margin-bottom: 20px;
+    }
+    .upload-zone:hover, .upload-zone.dragover {
+      border-color: var(--accent);
+      background: rgba(124,111,205,0.05);
+    }
+    .upload-zone input[type="file"] {
+      position: absolute;
+      inset: 0;
+      opacity: 0;
+      cursor: pointer;
+      width: 100%;
+      height: 100%;
+    }
+    .upload-icon { font-size: 2.5rem; margin-bottom: 12px; display: block; }
+    .upload-text { font-size: 0.92rem; color: var(--text2); }
+    .upload-text strong { color: var(--accent2); }
+    .file-chosen {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: rgba(52,211,153,0.1);
+      border: 1px solid rgba(52,211,153,0.3);
+      border-radius: 8px;
+      padding: 8px 14px;
+      margin-top: 12px;
+      font-size: 0.85rem;
+      color: var(--green);
+      max-width: 100%;
+      word-break: break-all;
+    }
+
+    /* ══════════════════════════════════════════
+       LOADING STATE
+    ══════════════════════════════════════════ */
+    .loading-screen {
+      text-align: center;
+    }
+    .spinner {
+      width: 60px;
+      height: 60px;
+      border: 3px solid var(--border);
+      border-top-color: var(--accent2);
+      border-radius: 50%;
+      animation: spin 0.9s linear infinite;
+      margin: 0 auto 24px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .loading-msg {
+      font-size: 1.1rem;
+      font-weight: 500;
+      margin-bottom: 8px;
+    }
+    .loading-sub { color: var(--text2); font-size: 0.88rem; }
+
+    /* Progress dots */
+    .dots span {
+      display: inline-block;
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--accent2);
+      margin: 0 3px;
+      animation: dot-pulse 1.2s ease-in-out infinite;
+    }
+    .dots span:nth-child(2) { animation-delay: 0.2s; }
+    .dots span:nth-child(3) { animation-delay: 0.4s; }
+    @keyframes dot-pulse {
+      0%, 80%, 100% { transform: scale(0.6); opacity: 0.4; }
+      40%            { transform: scale(1);   opacity: 1; }
+    }
+
+    /* ══════════════════════════════════════════
+       QUIZ SCREEN
+    ══════════════════════════════════════════ */
+    .quiz-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 28px;
+    }
+    .quiz-meta { color: var(--text2); font-size: 0.85rem; }
+    .score-badge {
+      background: rgba(124,111,205,0.15);
+      border: 1px solid var(--accent);
+      border-radius: 20px;
+      padding: 5px 14px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: var(--accent2);
+    }
+
+    /* Progress bar */
+    .progress-bar {
+      width: 100%;
+      height: 4px;
+      background: var(--bg3);
+      border-radius: 2px;
+      margin-bottom: 28px;
+      overflow: hidden;
+    }
+    .progress-fill {
+      height: 100%;
+      background: linear-gradient(90deg, var(--accent), var(--accent2));
+      border-radius: 2px;
+      transition: width 0.5s ease;
+    }
+
+    .question-text {
+      font-size: 1.15rem;
+      font-weight: 500;
+      line-height: 1.55;
+      margin-bottom: 24px;
+    }
+
+    /* Options */
+    .options { display: flex; flex-direction: column; gap: 12px; }
+    .option {
+      background: var(--bg3);
+      border: 1.5px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 15px 18px;
+      cursor: pointer;
+      transition: all var(--transition);
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      font-size: 0.95rem;
+      text-align: left;
+    }
+    .option:hover:not(.disabled) {
+      border-color: var(--accent);
+      background: rgba(124,111,205,0.06);
+    }
+    .option-letter {
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      border: 1.5px solid var(--border2);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.8rem;
+      font-weight: 600;
+      flex-shrink: 0;
+      transition: all var(--transition);
+    }
+    .option.correct {
+      border-color: var(--green);
+      background: rgba(52,211,153,0.08);
+    }
+    .option.correct .option-letter {
+      background: var(--green);
+      border-color: var(--green);
+      color: #0a1f14;
+    }
+    .option.wrong {
+      border-color: var(--red);
+      background: rgba(248,113,113,0.08);
+    }
+    .option.wrong .option-letter {
+      background: var(--red);
+      border-color: var(--red);
+      color: #2a0a0a;
+    }
+    .option.disabled { cursor: default; }
+
+    /* Feedback message */
+    .feedback {
+      display: none;
+      margin-top: 20px;
+      padding: 12px 16px;
+      border-radius: var(--radius-sm);
+      font-size: 0.92rem;
+      font-weight: 500;
+      animation: fadeUp 0.3s ease;
+    }
+    .feedback.correct-fb {
+      display: block;
+      background: rgba(52,211,153,0.1);
+      border: 1px solid rgba(52,211,153,0.3);
+      color: var(--green);
+    }
+    .feedback.wrong-fb {
+      display: block;
+      background: rgba(248,113,113,0.1);
+      border: 1px solid rgba(248,113,113,0.3);
+      color: var(--red);
+    }
+
+    /* ══════════════════════════════════════════
+       RESULTS SCREEN
+    ══════════════════════════════════════════ */
+    .result-score-display {
+      text-align: center;
+      margin: 28px 0;
+    }
+    .score-circle {
+      width: 140px;
+      height: 140px;
+      border-radius: 50%;
+      border: 3px solid var(--accent);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      margin: 0 auto 16px;
+      background: rgba(124,111,205,0.08);
+      box-shadow: 0 0 40px rgba(124,111,205,0.2);
+    }
+    .score-number {
+      font-family: var(--font-display);
+      font-size: 2.8rem;
+      font-weight: 800;
+      background: linear-gradient(135deg, var(--accent2), var(--gold2));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      line-height: 1;
+    }
+    .score-total { color: var(--text2); font-size: 0.85rem; }
+    .score-message { font-size: 1rem; color: var(--text2); }
+
+    /* Leaderboard */
+    .leaderboard { width: 100%; margin-top: 8px; }
+    .leaderboard-title {
+      font-family: var(--font-display);
+      font-size: 1rem;
+      font-weight: 700;
+      margin-bottom: 12px;
+      color: var(--text2);
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      font-size: 0.8rem;
+    }
+    .lb-entry {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 11px 14px;
+      border-radius: var(--radius-sm);
+      margin-bottom: 8px;
+      background: var(--bg3);
+      border: 1px solid var(--border);
+      transition: all var(--transition);
+      animation: fadeUp 0.3s ease both;
+    }
+    .lb-entry.me {
+      border-color: var(--accent);
+      background: rgba(124,111,205,0.07);
+    }
+    .lb-rank {
+      font-family: var(--font-display);
+      font-size: 1rem;
+      font-weight: 800;
+      width: 28px;
+      text-align: center;
+      flex-shrink: 0;
+    }
+    .lb-rank.gold   { color: var(--gold2); }
+    .lb-rank.silver { color: #c0c0d0; }
+    .lb-rank.bronze { color: #cd7f32; }
+    .lb-name { flex: 1; font-weight: 500; font-size: 0.92rem; }
+    .lb-score {
+      font-family: var(--font-display);
+      font-weight: 700;
+      color: var(--accent2);
+      font-size: 1rem;
+    }
+    .lb-bar-wrap { flex: 0 0 80px; }
+    .lb-bar {
+      height: 4px;
+      border-radius: 2px;
+      background: linear-gradient(90deg, var(--accent), var(--accent2));
+      transition: width 0.6s ease;
+    }
+
+    /* ══════════════════════════════════════════
+       MULTIPLAYER LOBBY
+    ══════════════════════════════════════════ */
+    .room-display {
+      background: var(--bg3);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 20px;
+      text-align: center;
+      margin-bottom: 20px;
+    }
+    .room-id-label { font-size: 0.75rem; color: var(--text2); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px; }
+    .room-id {
+      font-family: var(--font-display);
+      font-size: 2.4rem;
+      font-weight: 800;
+      letter-spacing: 6px;
+      color: var(--gold2);
+    }
+    .copy-btn {
+      margin-top: 10px;
+      background: transparent;
+      border: 1px solid var(--border2);
+      border-radius: 6px;
+      padding: 5px 14px;
+      color: var(--text2);
+      font-size: 0.8rem;
+      cursor: pointer;
+      transition: all var(--transition);
+      font-family: var(--font-body);
+    }
+    .copy-btn:hover { border-color: var(--accent); color: var(--accent2); }
+
+    .participant-list { margin-bottom: 20px; }
+    .participant-list-title {
+      font-size: 0.78rem;
+      color: var(--text2);
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      margin-bottom: 10px;
+    }
+    .participant-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 5px 12px;
+      font-size: 0.83rem;
+      margin: 4px;
+      animation: fadeUp 0.25s ease;
+    }
+    .participant-chip .dot {
+      width: 7px; height: 7px;
+      border-radius: 50%;
+      background: var(--green);
+      flex-shrink: 0;
+    }
+    .host-badge {
+      background: rgba(245,158,11,0.15);
+      border: 1px solid rgba(245,158,11,0.3);
+      color: var(--gold);
+      border-radius: 4px;
+      padding: 1px 6px;
+      font-size: 0.7rem;
+      font-weight: 600;
+    }
+
+    /* ══════════════════════════════════════════
+       LIVE MULTIPLAYER QUIZ
+    ══════════════════════════════════════════ */
+    .live-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      margin-bottom: 20px;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+    .live-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: rgba(248,113,113,0.1);
+      border: 1px solid rgba(248,113,113,0.3);
+      border-radius: 20px;
+      padding: 4px 12px;
+      font-size: 0.78rem;
+      font-weight: 600;
+      color: var(--red);
+    }
+    .live-dot {
+      width: 7px; height: 7px;
+      border-radius: 50%;
+      background: var(--red);
+      animation: pulse 1s ease-in-out infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50%       { opacity: 0.5; transform: scale(0.7); }
+    }
+
+    /* Live leaderboard sidebar */
+    .quiz-live-layout {
+      display: grid;
+      grid-template-columns: 1fr 220px;
+      gap: 16px;
+      width: 100%;
+      max-width: 760px;
+    }
+    .live-lb {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 20px;
+      box-shadow: var(--shadow);
+      position: relative;
+      overflow: hidden;
+    }
+    .live-lb::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 2px;
+      background: linear-gradient(90deg, var(--gold), var(--gold2));
+      opacity: 0.6;
+    }
+    .live-lb-title {
+      font-family: var(--font-display);
+      font-size: 0.75rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: var(--text2);
+      margin-bottom: 14px;
+    }
+
+    /* ══════════════════════════════════════════
+       TOAST NOTIFICATIONS
+    ══════════════════════════════════════════ */
+    #toast-container {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      z-index: 9999;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      pointer-events: none;
+    }
+    .toast {
+      background: var(--surface2);
+      border: 1px solid var(--border2);
+      border-radius: var(--radius-sm);
+      padding: 12px 18px;
+      font-size: 0.88rem;
+      max-width: 320px;
+      box-shadow: var(--shadow);
+      animation: toast-in 0.3s ease;
+      pointer-events: auto;
+    }
+    .toast.error   { border-color: rgba(248,113,113,0.5); color: var(--red); }
+    .toast.success { border-color: rgba(52,211,153,0.5);  color: var(--green); }
+    .toast.info    { border-color: rgba(96,165,250,0.5);  color: var(--blue); }
+    @keyframes toast-in {
+      from { opacity: 0; transform: translateX(30px); }
+      to   { opacity: 1; transform: translateX(0); }
+    }
+    @keyframes toast-out {
+      from { opacity: 1; }
+      to   { opacity: 0; transform: translateX(30px); }
+    }
+
+    /* ══════════════════════════════════════════
+       UTILITY CLASSES
+    ══════════════════════════════════════════ */
+    .mt8  { margin-top: 8px; }
+    .mt12 { margin-top: 12px; }
+    .mt16 { margin-top: 16px; }
+    .mt20 { margin-top: 20px; }
+    .mt24 { margin-top: 24px; }
+    .mb8  { margin-bottom: 8px; }
+    .flex { display: flex; }
+    .gap8 { gap: 8px; }
+    .gap12 { gap: 12px; }
+    .text-center { text-align: center; }
+    .text-sm { font-size: 0.85rem; }
+    .text-muted { color: var(--text2); }
+    .hidden { display: none !important; }
+
+    /* ══════════════════════════════════════════
+       RESPONSIVE
+    ══════════════════════════════════════════ */
+    @media (max-width: 620px) {
+      .card { padding: 28px 20px; }
+      .quiz-live-layout { grid-template-columns: 1fr; }
+      .live-lb { display: none; }
+      .logo { font-size: 2.2rem; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════════════
+     TOAST CONTAINER
+═══════════════════════════════════════════════ -->
+<div id="toast-container"></div>
+
+<!-- ═══════════════════════════════════════════════
+     SCREEN 1: NAME ENTRY
+═══════════════════════════════════════════════ -->
+<div class="screen active" id="screen-name">
+  <div class="card">
+    <div class="logo">Quizzify</div>
+    <div class="tagline">AI Quiz Generator · Real-Time Multiplayer</div>
+
+    <div class="input-group">
+      <label for="player-name">Your Name</label>
+      <input type="text" id="player-name" placeholder="Enter your display name" maxlength="30" autofocus />
+    </div>
+
+    <button class="btn btn-primary" onclick="handleNameSubmit()">
+      Continue →
+    </button>
+
+    <div class="divider">choose your mode</div>
+
+    <div class="mode-grid">
+      <div class="mode-card" onclick="handleNameAndMode('single')">
+        <span class="mode-icon">⚡</span>
+        <div class="mode-title">Single Player</div>
+        <div class="mode-desc">Upload notes, get quiz instantly</div>
+      </div>
+      <div class="mode-card" onclick="handleNameAndMode('multi')">
+        <span class="mode-icon">🎮</span>
+        <div class="mode-title">Multiplayer</div>
+        <div class="mode-desc">Compete with friends live</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════
+     SCREEN 2: MODE SELECT (after name)
+═══════════════════════════════════════════════ -->
+<div class="screen" id="screen-mode">
+  <div class="card">
+    <h2>Hello, <span id="name-display"></span>! 👋</h2>
+    <p class="subtitle">How do you want to play today?</p>
+
+    <div class="mode-grid" style="margin-bottom: 0;">
+      <div class="mode-card" onclick="goToUpload()">
+        <span class="mode-icon">⚡</span>
+        <div class="mode-title">Single Player</div>
+        <div class="mode-desc">Upload notes, get quiz instantly</div>
+      </div>
+      <div class="mode-card" onclick="goToMultiLobby()">
+        <span class="mode-icon">🎮</span>
+        <div class="mode-title">Multiplayer</div>
+        <div class="mode-desc">Compete with friends live</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════
+     SCREEN 3: FILE UPLOAD
+═══════════════════════════════════════════════ -->
+<div class="screen" id="screen-upload">
+  <div class="card">
+    <h2>Upload Your Notes</h2>
+    <p class="subtitle">We'll generate 5 MCQs from your study material</p>
+
+    <div class="upload-zone" id="upload-zone">
+      <input type="file" id="file-input" accept=".pdf,.txt" onchange="handleFileSelect(this)" />
+      <span class="upload-icon">📄</span>
+      <div class="upload-text">
+        <strong>Click to choose</strong> or drag and drop<br />
+        <span style="font-size:0.8rem;">PDF or TXT · Max 10MB</span>
+      </div>
+      <div id="file-chosen-display"></div>
+    </div>
+
+    <button class="btn btn-primary" id="generate-btn" onclick="generateQuiz()" disabled>
+      Generate Quiz with AI ✨
+    </button>
+
+    <button class="btn btn-secondary mt12" onclick="showScreen('screen-mode')">
+      ← Back
+    </button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════
+     SCREEN 4: LOADING (AI generating)
+═══════════════════════════════════════════════ -->
+<div class="screen" id="screen-loading">
+  <div class="card loading-screen">
+    <div class="spinner"></div>
+    <div class="loading-msg">Generating your quiz</div>
+    <div class="loading-sub">
+      AI is reading your notes (10–20 seconds)
+      <div class="dots mt8">
+        <span></span><span></span><span></span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════
+     SCREEN 5: QUIZ (Single Player)
+═══════════════════════════════════════════════ -->
+<div class="screen" id="screen-quiz">
+  <div class="card card-wide">
+    <div class="quiz-header">
+      <div>
+        <div class="quiz-meta" id="quiz-meta">Question 1 of 5</div>
+      </div>
+      <div class="score-badge" id="quiz-score">Score: 0</div>
+    </div>
+
+    <div class="progress-bar">
+      <div class="progress-fill" id="quiz-progress" style="width: 0%"></div>
+    </div>
+
+    <div class="question-text" id="question-text"></div>
+    <div class="options" id="options-container"></div>
+    <div class="feedback" id="feedback"></div>
+
+    <button class="btn btn-primary mt20 hidden" id="next-btn" onclick="nextQuestion()">
+      Next Question →
+    </button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════
+     SCREEN 6: RESULTS (Single Player)
+═══════════════════════════════════════════════ -->
+<div class="screen" id="screen-results">
+  <div class="card card-wide">
+    <div class="text-center">
+      <h2 id="result-heading">Quiz Complete! 🎉</h2>
+    </div>
+
+    <div class="result-score-display">
+      <div class="score-circle">
+        <div class="score-number" id="final-score">0</div>
+        <div class="score-total" id="final-total">/ 5</div>
+      </div>
+      <div class="score-message" id="score-message"></div>
+    </div>
+
+    <div class="leaderboard">
+      <div class="leaderboard-title">🏆 All-Time Leaderboard</div>
+      <div id="leaderboard-list"></div>
+    </div>
+
+    <div class="flex gap8 mt24">
+      <button class="btn btn-secondary" onclick="retakeQuiz()">Retake Quiz</button>
+      <button class="btn btn-primary" onclick="showScreen('screen-mode')">New Quiz</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════
+     SCREEN 7: MULTIPLAYER LOBBY
+═══════════════════════════════════════════════ -->
+<div class="screen" id="screen-multi-lobby">
+  <div class="card">
+    <h2>Multiplayer</h2>
+    <p class="subtitle">Create a room or join an existing one</p>
+
+    <div class="input-group">
+      <label>Create a New Room</label>
+      <button class="btn btn-gold" onclick="createRoom()">Create Room 🚀</button>
+    </div>
+
+    <div class="divider">or join existing</div>
+
+    <div class="input-group">
+      <label for="join-room-input">Room ID</label>
+      <input type="text" id="join-room-input" placeholder="Enter 6-character Room ID" maxlength="6"
+             style="text-transform: uppercase; letter-spacing: 4px; font-family: var(--font-display); font-size: 1.2rem;" />
+    </div>
+    <button class="btn btn-primary" onclick="joinRoom()">Join Room →</button>
+
+    <button class="btn btn-secondary mt12" onclick="showScreen('screen-mode')">← Back</button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════
+     SCREEN 8: WAITING ROOM (after create/join)
+═══════════════════════════════════════════════ -->
+<div class="screen" id="screen-waiting">
+  <div class="card">
+    <div class="room-display">
+      <div class="room-id-label">Share this Room ID</div>
+      <div class="room-id" id="waiting-room-id">——</div>
+      <button class="copy-btn" onclick="copyRoomId()">📋 Copy</button>
+    </div>
+
+    <div class="participant-list">
+      <div class="participant-list-title" id="participants-count">Players (0)</div>
+      <div id="participants-chips"></div>
+    </div>
+
+    <!-- Host: upload + start -->
+    <div id="host-controls">
+      <div class="upload-zone" id="multi-upload-zone" style="padding: 24px;">
+        <input type="file" id="multi-file-input" accept=".pdf,.txt" onchange="handleMultiFileSelect(this)" />
+        <span class="upload-icon">📄</span>
+        <div class="upload-text">
+          <strong>Upload notes</strong> to generate questions<br />
+          <span style="font-size:0.8rem;">PDF or TXT</span>
+        </div>
+        <div id="multi-file-chosen"></div>
+      </div>
+      <button class="btn btn-gold" id="start-quiz-btn" onclick="hostStartQuiz()" disabled>
+        Start Quiz for Everyone 🚀
+      </button>
+    </div>
+
+    <!-- Participant: waiting message -->
+    <div id="participant-wait-msg" class="hidden" style="text-align:center; padding: 20px 0;">
+      <div style="font-size:1.6rem; margin-bottom:12px;">⏳</div>
+      <div style="font-weight:500; margin-bottom:6px;">Waiting for host to start…</div>
+      <div class="text-muted text-sm">Sit tight! The quiz will begin shortly.</div>
+    </div>
+
+    <button class="btn btn-danger mt12 btn-sm" style="width:100%" onclick="leaveRoom()">Leave Room</button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════
+     SCREEN 9: LIVE MULTIPLAYER QUIZ
+═══════════════════════════════════════════════ -->
+<div class="screen" id="screen-live-quiz">
+  <div class="quiz-live-layout">
+    <!-- Quiz card -->
+    <div class="card">
+      <div class="live-header">
+        <div>
+          <div class="live-badge">
+            <span class="live-dot"></span> LIVE
+          </div>
+          <div class="quiz-meta mt8" id="live-quiz-meta">Question 1 of 5</div>
+        </div>
+        <div class="score-badge" id="live-score">Score: 0</div>
+      </div>
+
+      <div class="progress-bar">
+        <div class="progress-fill" id="live-progress" style="width: 0%"></div>
+      </div>
+
+      <div class="question-text" id="live-question-text"></div>
+      <div class="options" id="live-options-container"></div>
+      <div class="feedback" id="live-feedback"></div>
+
+      <button class="btn btn-primary mt20 hidden" id="live-next-btn" onclick="liveNextQuestion()">
+        Next Question →
+      </button>
+    </div>
+
+    <!-- Live leaderboard -->
+    <div class="live-lb">
+      <div class="live-lb-title">🏆 Live Rankings</div>
+      <div id="live-lb-list"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════
+     SCREEN 10: MULTIPLAYER RESULTS
+═══════════════════════════════════════════════ -->
+<div class="screen" id="screen-multi-results">
+  <div class="card card-wide">
+    <div class="text-center">
+      <h2>Quiz Over! 🎊</h2>
+      <p class="subtitle">Final standings</p>
+    </div>
+
+    <div id="podium" style="display:flex; justify-content:center; gap:12px; margin:24px 0; align-items:flex-end; min-height:120px;"></div>
+
+    <div class="leaderboard">
+      <div class="leaderboard-title">Final Leaderboard</div>
+      <div id="multi-lb-list"></div>
+    </div>
+
+    <div class="flex gap8 mt24">
+      <button class="btn btn-secondary" onclick="showScreen('screen-mode')">Play Again</button>
+      <button class="btn btn-primary" onclick="showScreen('screen-name')">Home</button>
+    </div>
+  </div>
+</div>
+
+
+<!-- ═══════════════════════════════════════════════
+     JAVASCRIPT
+═══════════════════════════════════════════════ -->
+<script>
+/* ═══════════════════════════════════════════════
+   STATE
+═══════════════════════════════════════════════ */
+const state = {
+  playerName   : '',
+  questions    : [],          // Array<{question, options[4], correctIndex}>
+  currentQ     : 0,
+  score        : 0,
+  answered     : false,
+  mode         : 'single',   // 'single' | 'multi'
+  isHost       : false,
+  roomId       : '',
+  socket       : null,
+  multiScore   : 0,
+  multiCurrentQ: 0,
+  multiAnswered: false,
+  uploadedFile : null,
+};
+
+/* ═══════════════════════════════════════════════
+   SCREEN MANAGEMENT
+═══════════════════════════════════════════════ */
+function showScreen(id) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  const el = document.getElementById(id);
+  if (el) el.classList.add('active');
+}
+
+/* ═══════════════════════════════════════════════
+   TOAST
+═══════════════════════════════════════════════ */
+function toast(msg, type = 'info', duration = 3500) {
+  const container = document.getElementById('toast-container');
+  const el = document.createElement('div');
+  el.className = `toast ${type}`;
+  el.textContent = msg;
+  container.appendChild(el);
+  setTimeout(() => {
+    el.style.animation = 'toast-out 0.3s ease forwards';
+    setTimeout(() => el.remove(), 300);
+  }, duration);
+}
+
+/* ═══════════════════════════════════════════════
+   NAME ENTRY
+═══════════════════════════════════════════════ */
+function handleNameSubmit() {
+  const name = document.getElementById('player-name').value.trim();
+  if (!name) { toast('Please enter your name first!', 'error'); return; }
+  state.playerName = name;
+  document.getElementById('name-display').textContent = name;
+  showScreen('screen-mode');
+}
+
+function handleNameAndMode(mode) {
+  const name = document.getElementById('player-name').value.trim();
+  if (!name) { toast('Please enter your name first!', 'error'); return; }
+  state.playerName = name;
+  document.getElementById('name-display').textContent = name;
+  if (mode === 'single') goToUpload();
+  else goToMultiLobby();
+}
+
+// Allow Enter key on name input
+document.getElementById('player-name').addEventListener('keydown', e => {
+  if (e.key === 'Enter') handleNameSubmit();
+});
+
+/* ═══════════════════════════════════════════════
+   MODE NAVIGATION
+═══════════════════════════════════════════════ */
+function goToUpload() {
+  state.mode = 'single';
+  showScreen('screen-upload');
+}
+
+function goToMultiLobby() {
+  state.mode = 'multi';
+  initSocket();
+  showScreen('screen-multi-lobby');
+}
+
+/* ═══════════════════════════════════════════════
+   FILE UPLOAD (Single Player)
+═══════════════════════════════════════════════ */
+function handleFileSelect(input) {
+  const file = input.files[0];
+  if (!file) return;
+  state.uploadedFile = file;
+
+  const display = document.getElementById('file-chosen-display');
+  display.innerHTML = `<div class="file-chosen">✅ ${file.name}</div>`;
+  document.getElementById('generate-btn').disabled = false;
+}
+
+// Drag and drop
+const uploadZone = document.getElementById('upload-zone');
+uploadZone.addEventListener('dragover', e => { e.preventDefault(); uploadZone.classList.add('dragover'); });
+uploadZone.addEventListener('dragleave', () => uploadZone.classList.remove('dragover'));
+uploadZone.addEventListener('drop', e => {
+  e.preventDefault();
+  uploadZone.classList.remove('dragover');
+  const file = e.dataTransfer.files[0];
+  if (file && (file.type === 'application/pdf' || file.name.endsWith('.txt'))) {
+    state.uploadedFile = file;
+    document.getElementById('file-chosen-display').innerHTML = `<div class="file-chosen">✅ ${file.name}</div>`;
+    document.getElementById('generate-btn').disabled = false;
+  } else {
+    toast('Only PDF or TXT files are supported.', 'error');
+  }
+});
+
+/* ═══════════════════════════════════════════════
+   EXTRACT TEXT FROM FILE
+═══════════════════════════════════════════════ */
+async function extractText(file) {
+  const isTxt = file.name.toLowerCase().endsWith('.txt');
+  const isPdf = file.name.toLowerCase().endsWith('.pdf') || file.type === 'application/pdf';
+
+  if (isTxt) {
+    const text = await file.text();
+    return text.trim();
+  }
+
+  if (isPdf) {
+    return await extractPdfText(file);
+  }
+
+  throw new Error('Unsupported file type. Please upload a PDF or TXT file.');
+}
+
+async function extractPdfText(file) {
+  // Step 1: Load PDF.js library if not already loaded
+  if (!window.pdfjsLib) {
+    await loadScript('https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js');
+  }
+
+  // Step 2: Disable the worker (avoids CDN CORS issues for the worker script)
+  window.pdfjsLib.GlobalWorkerOptions.workerSrc = '';
+
+  // Step 3: Read file as ArrayBuffer
+  const arrayBuffer = await file.arrayBuffer();
+
+  // Step 4: Load PDF document
+  const loadingTask = pdfjsLib.getDocument({ data: arrayBuffer, useWorkerFetch: false, isEvalSupported: false, useSystemFonts: true });
+  const pdf = await loadingTask.promise;
+
+  // Step 5: Extract text from every page
+  let fullText = '';
+  for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
+    const page    = await pdf.getPage(pageNum);
+    const content = await page.getTextContent();
+
+    // Join items — preserve spacing using transform positions
+    let lastY = null;
+    let pageText = '';
+    for (const item of content.items) {
+      if (!item.str) continue;
+      // New line if Y position changed significantly
+      const y = item.transform ? item.transform[5] : null;
+      if (lastY !== null && y !== null && Math.abs(y - lastY) > 5) {
+        pageText += '\n';
+      } else if (pageText && !pageText.endsWith(' ') && !item.str.startsWith(' ')) {
+        pageText += ' ';
+      }
+      pageText += item.str;
+      lastY = y;
+    }
+    fullText += pageText + '\n\n';
+  }
+
+  return fullText.trim();
+}
+
+function loadScript(src) {
+  return new Promise((resolve, reject) => {
+    // Don't load twice
+    if (document.querySelector(`script[src="${src}"]`)) { resolve(); return; }
+    const script  = document.createElement('script');
+    script.src    = src;
+    script.onload = resolve;
+    script.onerror = () => reject(new Error('Failed to load PDF.js library. Check your internet connection.'));
+    document.head.appendChild(script);
+  });
+}
+
+/* ═══════════════════════════════════════════════
+   AI ENGINE — Pollinations.AI (free, no login, no API key)
+   Works from local files, no popup, no auth needed
+═══════════════════════════════════════════════ */
+async function callAI(prompt) {
+  // Pollinations.AI: free, anonymous, no key needed, works from file://
+  const url = 'https://text.pollinations.ai/openai';
+
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      model: 'openai',
+      messages: [
+        {
+          role: 'system',
+          content: 'You are an expert educator who creates multiple choice quiz questions. Always respond with valid JSON only, no markdown, no explanation.'
+        },
+        { role: 'user', content: prompt }
+      ],
+      temperature: 0.7,
+      max_tokens: 1500
+    })
+  });
+
+  if (!res.ok) {
+    throw new Error('AI API returned status ' + res.status + '. Please try again.');
+  }
+
+  const data = await res.json();
+  const text = data?.choices?.[0]?.message?.content || '';
+  if (!text) throw new Error('AI returned an empty response. Please try again.');
+  return text;
+}
+
+/* ═══════════════════════════════════════════════
+   AI QUIZ GENERATION
+═══════════════════════════════════════════════ */
+async function generateQuiz() {
+  if (!state.uploadedFile) { toast('Please upload a file first!', 'error'); return; }
+
+  showScreen('screen-loading');
+
+  try {
+    // Step 1: Extract text from file
+    let rawText = '';
+    try {
+      rawText = await extractText(state.uploadedFile);
+    } catch (extractErr) {
+      throw new Error('Could not read file: ' + extractErr.message);
+    }
+
+    console.log('[Quizzify] Extracted text length:', rawText.length);
+    console.log('[Quizzify] Preview:', rawText.slice(0, 200));
+
+    if (!rawText || rawText.trim().length < 30) {
+      throw new Error(
+        'This PDF has no extractable text (it may be a scanned image). ' +
+        'Please use a PDF with selectable text, or save your notes as a .txt file and upload that.'
+      );
+    }
+
+    // Step 2: Build prompt and call AI
+    const excerpt = rawText.slice(0, 6000);
+    const prompt = "You are an expert educator. Generate exactly 5 MCQ questions from these study notes.\n\nSTUDY NOTES:\n" + excerpt + "\n\nRespond ONLY with this exact JSON format, no extra text:\n{\n  \"questions\": [\n    {\n      \"question\": \"Question text?\",\n      \"options\": [\"Option A\", \"Option B\", \"Option C\", \"Option D\"],\n      \"correctIndex\": 0\n    }\n  ]\n}\n\nRules: exactly 5 questions, 4 options each, correctIndex is 0-based index (0-3) of correct answer.";
+
+    let response;
+    try {
+      response = await callAI(prompt);
+    } catch (aiErr) {
+      throw new Error('AI service error: ' + (aiErr.message || 'Could not reach AI. Check your internet connection.'));
+    }
+
+    // Step 3: Parse the AI response
+    const raw = typeof response === 'string'
+      ? response
+      : (response?.message?.content || response?.content || JSON.stringify(response));
+
+    console.log('[Quizzify] AI response:', raw.slice(0, 500));
+
+    let cleaned = raw.replace(/```json/g, '').replace(/```/g, '').trim();
+
+    let parsed;
+    try {
+      parsed = JSON.parse(cleaned);
+    } catch (e1) {
+      // Try extracting JSON from mixed response
+      const match = cleaned.match(/\{[\s\S]*\}/);
+      if (match) {
+        try { parsed = JSON.parse(match[0]); }
+        catch (e2) { throw new Error('Could not parse AI response as JSON. Please try again.'); }
+      } else {
+        throw new Error('AI response did not contain valid JSON. Please try again.');
+      }
+    }
+
+    if (!parsed.questions || !Array.isArray(parsed.questions) || parsed.questions.length === 0) {
+      throw new Error('AI returned no questions. Please try again.');
+    }
+
+    state.questions = parsed.questions;
+    state.currentQ  = 0;
+    state.score     = 0;
+    startSingleQuiz();
+
+  } catch (err) {
+    console.error('[Quizzify] Quiz generation failed:', err);
+    toast('❌ ' + (err.message || 'Unknown error. Please try again.'), 'error', 7000);
+    showScreen('screen-upload');
+  }
+}
+
+/* ═══════════════════════════════════════════════
+   SINGLE PLAYER QUIZ
+═══════════════════════════════════════════════ */
+function startSingleQuiz() {
+  state.currentQ = 0;
+  state.score    = 0;
+  state.answered = false;
+  renderQuestion();
+  showScreen('screen-quiz');
+}
+
+function renderQuestion() {
+  const q    = state.questions[state.currentQ];
+  const total = state.questions.length;
+  const num   = state.currentQ + 1;
+
+  document.getElementById('quiz-meta').textContent     = `Question ${num} of ${total}`;
+  document.getElementById('quiz-score').textContent    = `Score: ${state.score}`;
+  document.getElementById('quiz-progress').style.width = `${((num - 1) / total) * 100}%`;
+  document.getElementById('question-text').textContent = q.question;
+
+  const container = document.getElementById('options-container');
+  container.innerHTML = '';
+  document.getElementById('feedback').className = 'feedback';
+  document.getElementById('next-btn').classList.add('hidden');
+  state.answered = false;
+
+  const letters = ['A', 'B', 'C', 'D'];
+  q.options.forEach((opt, i) => {
+    const btn = document.createElement('div');
+    btn.className = 'option';
+    btn.innerHTML = `<div class="option-letter">${letters[i]}</div><div>${opt}</div>`;
+    btn.onclick = () => selectAnswer(i);
+    container.appendChild(btn);
+  });
+}
+
+function selectAnswer(selectedIndex) {
+  if (state.answered) return;
+  state.answered = true;
+
+  const q       = state.questions[state.currentQ];
+  const options = document.querySelectorAll('#options-container .option');
+  const fb      = document.getElementById('feedback');
+
+  options.forEach(o => o.classList.add('disabled'));
+
+  if (selectedIndex === q.correctIndex) {
+    options[selectedIndex].classList.add('correct');
+    state.score++;
+    fb.className = 'feedback correct-fb';
+    fb.textContent = '✅ Correct! Well done.';
+  } else {
+    options[selectedIndex].classList.add('wrong');
+    options[q.correctIndex].classList.add('correct');
+    fb.className = 'feedback wrong-fb';
+    fb.textContent = `❌ Wrong. Correct answer: ${q.options[q.correctIndex]}`;
+  }
+
+  document.getElementById('quiz-score').textContent = `Score: ${state.score}`;
+  document.getElementById('next-btn').classList.remove('hidden');
+}
+
+function nextQuestion() {
+  state.currentQ++;
+  if (state.currentQ >= state.questions.length) {
+    showResults();
+  } else {
+    renderQuestion();
+  }
+}
+
+/* ═══════════════════════════════════════════════
+   RESULTS (Single Player)
+═══════════════════════════════════════════════ */
+function showResults() {
+  const total = state.questions.length;
+  const score = state.score;
+  const pct   = Math.round((score / total) * 100);
+
+  document.getElementById('final-score').textContent = score;
+  document.getElementById('final-total').textContent = `/ ${total}`;
+  document.getElementById('quiz-progress').style.width = '100%';
+
+  let msg = '';
+  if (pct === 100)     msg = '🌟 Perfect score! Extraordinary!';
+  else if (pct >= 80)  msg = '🔥 Excellent work!';
+  else if (pct >= 60)  msg = '👍 Good job! Keep studying.';
+  else if (pct >= 40)  msg = '📚 Keep practicing, you\'ll improve!';
+  else                 msg = '💪 Don\'t give up! Review your notes.';
+  document.getElementById('score-message').textContent = msg;
+
+  // Save to localStorage
+  saveToLeaderboard(state.playerName, score, total);
+  renderLeaderboard();
+  showScreen('screen-results');
+}
+
+function saveToLeaderboard(name, score, total) {
+  const key     = 'quizzify_leaderboard';
+  const entries = JSON.parse(localStorage.getItem(key) || '[]');
+  entries.push({ name, score, total, date: new Date().toLocaleDateString() });
+  entries.sort((a, b) => b.score - a.score);
+  localStorage.setItem(key, JSON.stringify(entries.slice(0, 10)));
+}
+
+function renderLeaderboard() {
+  const entries = JSON.parse(localStorage.getItem('quizzify_leaderboard') || '[]');
+  const list    = document.getElementById('leaderboard-list');
+  const ranks   = ['🥇', '🥈', '🥉'];
+  const rankClass = ['gold', 'silver', 'bronze'];
+
+  if (entries.length === 0) {
+    list.innerHTML = '<div class="text-muted text-sm">No entries yet. Be the first!</div>';
+    return;
+  }
+
+  const maxScore = entries[0]?.score || 1;
+
+  list.innerHTML = entries.map((e, i) => `
+    <div class="lb-entry ${e.name === state.playerName ? 'me' : ''}" style="animation-delay:${i * 0.05}s">
+      <div class="lb-rank ${rankClass[i] || ''}">${ranks[i] || i + 1}</div>
+      <div class="lb-name">${e.name}</div>
+      <div class="lb-bar-wrap">
+        <div class="lb-bar" style="width:${Math.round((e.score / maxScore) * 100)}%"></div>
+      </div>
+      <div class="lb-score">${e.score}/${e.total || 5}</div>
+    </div>
+  `).join('');
+}
+
+function retakeQuiz() {
+  state.currentQ = 0;
+  state.score    = 0;
+  startSingleQuiz();
+}
+
+/* ═══════════════════════════════════════════════
+   SOCKET.IO INIT
+═══════════════════════════════════════════════ */
+function initSocket() {
+  if (state.socket && state.socket.connected) return;
+
+  // ⚠️ UPDATE THIS URL when you deploy the backend
+  const SERVER_URL = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+    ? 'http://localhost:3000'
+    : 'https://YOUR-DEPLOYED-BACKEND.onrender.com'; // ← replace with your Render/Railway URL
+
+  state.socket = io(SERVER_URL, {
+    transports: ['websocket', 'polling'],
+    reconnectionAttempts: 5
+  });
+
+  const sock = state.socket;
+
+  sock.on('connect', () => {
+    console.log('Connected to server:', sock.id);
+  });
+
+  sock.on('connect_error', () => {
+    toast('Cannot connect to server. Is the backend running?', 'error', 6000);
+  });
+
+  // ── Room events ──────────────────────────────
+  sock.on('room-created', ({ roomId, participants }) => {
+    state.roomId = roomId;
+    state.isHost = true;
+    document.getElementById('waiting-room-id').textContent = roomId;
+    document.getElementById('host-controls').classList.remove('hidden');
+    document.getElementById('participant-wait-msg').classList.add('hidden');
+    updateParticipantChips(participants, true);
+    showScreen('screen-waiting');
+    toast(`Room ${roomId} created! Share it with friends.`, 'success');
+  });
+
+  sock.on('room-joined', ({ roomId, participants }) => {
+    state.roomId = roomId;
+    state.isHost = false;
+    document.getElementById('waiting-room-id').textContent = roomId;
+    document.getElementById('host-controls').classList.add('hidden');
+    document.getElementById('participant-wait-msg').classList.remove('hidden');
+    updateParticipantChips(participants, false);
+    showScreen('screen-waiting');
+    toast(`Joined room ${roomId}!`, 'success');
+  });
+
+  sock.on('player-joined', ({ name, participants }) => {
+    updateParticipantChips(participants, state.isHost);
+    toast(`${name} joined the room!`, 'info');
+  });
+
+  sock.on('host-assigned', ({ message }) => {
+    state.isHost = true;
+    document.getElementById('host-controls').classList.remove('hidden');
+    document.getElementById('participant-wait-msg').classList.add('hidden');
+    toast(message, 'info');
+  });
+
+  // ── Quiz events ──────────────────────────────
+  sock.on('quiz-started', ({ questions, totalPlayers }) => {
+    state.questions     = questions;
+    state.multiCurrentQ = 0;
+    state.multiScore    = 0;
+    state.multiAnswered = false;
+    renderLiveQuestion();
+    showScreen('screen-live-quiz');
+    toast(`Quiz started! ${totalPlayers} players.`, 'info');
+  });
+
+  sock.on('answer-result', ({ questionIndex, isCorrect, correctIndex, score }) => {
+    state.multiScore = score;
+    highlightLiveAnswer(questionIndex, isCorrect, correctIndex);
+    document.getElementById('live-score').textContent = `Score: ${score}`;
+    document.getElementById('live-next-btn').classList.remove('hidden');
+  });
+
+  sock.on('update-leaderboard', ({ leaderboard }) => {
+    renderLiveLB(leaderboard);
+  });
+
+  sock.on('player-disconnected', ({ name, participants }) => {
+    if (document.getElementById('screen-waiting').classList.contains('active')) {
+      updateParticipantChips(participants, state.isHost);
+    }
+    toast(`${name} left the game.`, 'info');
+  });
+
+  sock.on('quiz-ended', ({ leaderboard }) => {
+    showMultiResults(leaderboard);
+  });
+
+  sock.on('error', ({ message }) => {
+    toast(message, 'error', 5000);
+  });
+}
+
+/* ═══════════════════════════════════════════════
+   MULTIPLAYER ROOM ACTIONS
+═══════════════════════════════════════════════ */
+function createRoom() {
+  if (!state.socket?.connected) { toast('Not connected to server.', 'error'); return; }
+  state.socket.emit('create-room', { name: state.playerName });
+}
+
+function joinRoom() {
+  const roomId = document.getElementById('join-room-input').value.trim().toUpperCase();
+  if (!roomId || roomId.length < 4) { toast('Please enter a valid Room ID.', 'error'); return; }
+  if (!state.socket?.connected) { toast('Not connected to server.', 'error'); return; }
+  state.socket.emit('join-room', { name: state.playerName, roomId });
+}
+
+function copyRoomId() {
+  navigator.clipboard.writeText(state.roomId)
+    .then(() => toast('Room ID copied!', 'success'))
+    .catch(() => toast('Could not copy. Room ID: ' + state.roomId, 'info'));
+}
+
+function leaveRoom() {
+  if (state.socket) state.socket.disconnect();
+  state.socket = null;
+  state.roomId = '';
+  state.isHost = false;
+  showScreen('screen-mode');
+}
+
+function updateParticipantChips(participants, isHost) {
+  const chips = document.getElementById('participants-chips');
+  const count = document.getElementById('participants-count');
+  count.textContent = `Players (${participants.length})`;
+
+  chips.innerHTML = participants.map((p, i) => `
+    <div class="participant-chip">
+      <span class="dot"></span>
+      ${p.name}
+      ${i === 0 ? '<span class="host-badge">HOST</span>' : ''}
+    </div>
+  `).join('');
+}
+
+/* ═══════════════════════════════════════════════
+   HOST: FILE UPLOAD + START QUIZ
+═══════════════════════════════════════════════ */
+function handleMultiFileSelect(input) {
+  const file = input.files[0];
+  if (!file) return;
+  state.uploadedFile = file;
+  document.getElementById('multi-file-chosen').innerHTML = `<div class="file-chosen">✅ ${file.name}</div>`;
+  document.getElementById('start-quiz-btn').disabled = false;
+}
+
+async function hostStartQuiz() {
+  if (!state.uploadedFile) { toast('Upload notes first!', 'error'); return; }
+
+  const btn = document.getElementById('start-quiz-btn');
+  btn.disabled = true;
+  btn.textContent = '⏳ Generating questions…';
+
+  try {
+    let rawText = '';
+    try { rawText = await extractText(state.uploadedFile); }
+    catch (e) { throw new Error('Could not read file: ' + e.message); }
+
+    if (!rawText || rawText.trim().length < 30) {
+      throw new Error('This PDF has no extractable text. Please use a .txt file instead.');
+    }
+
+    const excerpt = rawText.slice(0, 6000);
+    const prompt = "You are an expert educator. Generate exactly 5 MCQ questions from these study notes.\n\nSTUDY NOTES:\n" + excerpt + "\n\nRespond ONLY with JSON:\n{\"questions\":[{\"question\":\"Question?\",\"options\":[\"A\",\"B\",\"C\",\"D\"],\"correctIndex\":0}]}\n\nExactly 5 questions, 4 options each, correctIndex is 0-3.";
+
+    const response = await callAI(prompt);
+    const raw = typeof response === 'string' ? response : (response?.message?.content || response?.content || '');
+    let cleaned = raw.replace(/```json/g, '').replace(/```/g, '').trim();
+    let parsed;
+    try { parsed = JSON.parse(cleaned); }
+    catch(e) {
+      const m = cleaned.match(/\{[\s\S]*\}/);
+      if (m) parsed = JSON.parse(m[0]);
+      else throw new Error('AI response was not valid JSON.');
+    }
+
+    state.socket.emit('start-quiz', { roomId: state.roomId, questions: parsed.questions });
+
+  } catch (err) {
+    toast('Failed to generate questions: ' + err.message, 'error', 5000);
+    btn.disabled = false;
+    btn.textContent = 'Start Quiz for Everyone 🚀';
+  }
+}
+
+/* ═══════════════════════════════════════════════
+   LIVE MULTIPLAYER QUIZ RENDERING
+═══════════════════════════════════════════════ */
+function renderLiveQuestion() {
+  const q     = state.questions[state.multiCurrentQ];
+  const total = state.questions.length;
+  const num   = state.multiCurrentQ + 1;
+
+  document.getElementById('live-quiz-meta').textContent  = `Question ${num} of ${total}`;
+  document.getElementById('live-score').textContent      = `Score: ${state.multiScore}`;
+  document.getElementById('live-progress').style.width   = `${((num - 1) / total) * 100}%`;
+  document.getElementById('live-question-text').textContent = q.question;
+
+  const container = document.getElementById('live-options-container');
+  container.innerHTML = '';
+  document.getElementById('live-feedback').className = 'feedback';
+  document.getElementById('live-next-btn').classList.add('hidden');
+  state.multiAnswered = false;
+
+  const letters = ['A', 'B', 'C', 'D'];
+  q.options.forEach((opt, i) => {
+    const btn = document.createElement('div');
+    btn.className = 'option';
+    btn.dataset.index = i;
+    btn.innerHTML = `<div class="option-letter">${letters[i]}</div><div>${opt}</div>`;
+    btn.onclick = () => submitLiveAnswer(i);
+    container.appendChild(btn);
+  });
+}
+
+function submitLiveAnswer(selectedIndex) {
+  if (state.multiAnswered) return;
+  state.multiAnswered = true;
+
+  document.querySelectorAll('#live-options-container .option').forEach(o => o.classList.add('disabled'));
+
+  state.socket.emit('submit-answer', {
+    roomId       : state.roomId,
+    questionIndex: state.multiCurrentQ,
+    selectedIndex
+  });
+}
+
+function highlightLiveAnswer(questionIndex, isCorrect, correctIndex) {
+  const options = document.querySelectorAll('#live-options-container .option');
+  const fb      = document.getElementById('live-feedback');
+  const q       = state.questions[questionIndex];
+
+  // Find what the player selected (the disabled one that is NOT the correct one, or correct one)
+  options.forEach((opt, i) => {
+    if (i === correctIndex) opt.classList.add('correct');
+  });
+
+  if (!isCorrect) {
+    // Find which was selected — mark it wrong
+    options.forEach((opt, i) => {
+      if (i !== correctIndex && opt.classList.contains('disabled') && !opt.classList.contains('correct')) {
+        // Could be the selected one — for simplicity mark all non-correct disabled as wrong if not correct
+      }
+    });
+    fb.className = 'feedback wrong-fb';
+    fb.textContent = `❌ Wrong. Correct: ${q.options[correctIndex]}`;
+  } else {
+    fb.className = 'feedback correct-fb';
+    fb.textContent = '✅ Correct!';
+  }
+}
+
+function liveNextQuestion() {
+  state.multiCurrentQ++;
+  if (state.multiCurrentQ >= state.questions.length) {
+    // Host signals end
+    if (state.isHost) {
+      state.socket.emit('end-quiz', { roomId: state.roomId });
+    }
+    // Others wait for quiz-ended event — but show a waiting state
+    document.getElementById('live-next-btn').textContent = 'Waiting for results…';
+    document.getElementById('live-next-btn').disabled = true;
+  } else {
+    renderLiveQuestion();
+  }
+}
+
+function renderLiveLB(leaderboard) {
+  const list = document.getElementById('live-lb-list');
+  const maxScore = leaderboard[0]?.score || 1;
+
+  list.innerHTML = leaderboard.map((e, i) => `
+    <div class="lb-entry" style="padding: 8px 10px; margin-bottom:6px;">
+      <div class="lb-rank ${i===0?'gold':i===1?'silver':i===2?'bronze':''}">${i+1}</div>
+      <div class="lb-name" style="font-size:0.83rem">${e.name}</div>
+      <div class="lb-score" style="font-size:0.85rem">${e.score}</div>
+    </div>
+  `).join('');
+}
+
+/* ═══════════════════════════════════════════════
+   MULTIPLAYER RESULTS
+═══════════════════════════════════════════════ */
+function showMultiResults(leaderboard) {
+  // Podium (top 3)
+  const podium    = document.getElementById('podium');
+  const podiumDef = [
+    { h: 100, label: '🥇', color: 'var(--gold2)' },
+    { h: 70,  label: '🥈', color: '#c0c0d0' },
+    { h: 55,  label: '🥉', color: '#cd7f32' },
+  ];
+  const top3 = leaderboard.slice(0, 3);
+  // Reorder: 2nd, 1st, 3rd
+  const order = [1, 0, 2];
+  podium.innerHTML = order.map(i => {
+    if (!top3[i]) return '';
+    const pd = podiumDef[i];
+    return `
+      <div style="text-align:center; flex:1;">
+        <div style="font-size:1.5rem; margin-bottom:4px;">${pd.label}</div>
+        <div style="font-weight:600; font-size:0.85rem; margin-bottom:6px;">${top3[i].name}</div>
+        <div style="background: rgba(255,255,255,0.05); border: 1px solid var(--border); border-radius:8px 8px 0 0;
+                    height:${pd.h}px; display:flex; align-items:center; justify-content:center;">
+          <span style="font-family:var(--font-display); font-size:1.4rem; font-weight:800; color:${pd.color}">
+            ${top3[i].score}
+          </span>
+        </div>
+      </div>`;
+  }).join('');
+
+  // Full list
+  const list = document.getElementById('multi-lb-list');
+  const max  = leaderboard[0]?.score || 1;
+  list.innerHTML = leaderboard.map((e, i) => `
+    <div class="lb-entry" style="animation-delay:${i*0.05}s">
+      <div class="lb-rank ${i===0?'gold':i===1?'silver':i===2?'bronze':''}">${['🥇','🥈','🥉'][i] || i+1}</div>
+      <div class="lb-name">${e.name}</div>
+      <div class="lb-bar-wrap">
+        <div class="lb-bar" style="width:${Math.round((e.score/max)*100)}%"></div>
+      </div>
+      <div class="lb-score">${e.score} pts</div>
+    </div>
+  `).join('');
+
+  showScreen('screen-multi-results');
+}
+</script>
+</body>
+</html>
