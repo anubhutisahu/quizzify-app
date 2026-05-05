@@ -112,6 +112,7 @@ app.get('/health', (_req, res) => {
 
 // ── GET /status — JSON API for status page ───
 app.get('/status', (_req, res) => {
+  res.header('Access-Control-Allow-Origin', '*');
   const roomList = Array.from(rooms.values()).map(r => ({
     roomId      : r.roomId,
     status      : r.status,
@@ -235,7 +236,7 @@ app.get('/', (_req, res) => {
     + '<script>'
     + 'async function fetchData(){'
     + 'try{'
-    + 'const res=await fetch("/status");'
+    + 'const res=await fetch("https://quizzify-app.onrender.com/status");'
     + 'const d=await res.json();'
     + 'document.getElementById("s-rooms").textContent=d.activeRooms;'
     + 'document.getElementById("s-conn").textContent=d.activeConnections;'
