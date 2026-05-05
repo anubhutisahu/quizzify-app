@@ -1534,9 +1534,13 @@ function initSocket() {
   if (state.socket && state.socket.connected) return;
 
   // ⚠️ UPDATE THIS URL when you deploy the backend
-  const SERVER_URL = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+  // file:// protocol has empty hostname — always use localhost
+  const isLocal = !window.location.hostname
+    || window.location.hostname === 'localhost'
+    || window.location.hostname === '127.0.0.1';
+  const SERVER_URL = isLocal
     ? 'http://localhost:3000'
-    : 'https://YOUR-DEPLOYED-BACKEND.onrender.com'; // ← replace with your Render/Railway URL
+    : 'https://quizzify-app.onrender.com';
 
   state.socket = io(SERVER_URL, {
     transports: ['websocket', 'polling'],
